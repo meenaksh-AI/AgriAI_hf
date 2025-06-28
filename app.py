@@ -1,18 +1,21 @@
 import streamlit as st
 import requests
+from googletrans import Translator
 
 st.set_page_config(page_title="AgriAI", page_icon="🌾")
 st.title("🌾 AgriAI — Smart Agriculture Assistant")
 
 HF_TOKEN = st.secrets.get("HF_API_TOKEN")
-MODEL_ID = "tiiuae/falcon-7b-instruct"
+MODEL_ID = "google/flan-t5-base"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 
-# Local backup for fallback
+translator = Translator()
+
+# Local backup answers
 backup_answers = {
     "best fertilizer for sugarcane": (
-        "For sugarcane, a balanced N-P-K fertilizer like 20-20-20 is commonly recommended, "
-        "along with organic composted manure to enhance soil structure."
+        "For sugarcane, a balanced NPK fertilizer like 20-20-20 is commonly recommended, "
+        "along with compost for better soil health."
     ),
     "best fertilizer for rice": (
         "Rice crops benefit from Urea (nitrogen), DAP (phosphorus), and MOP (potassium). "
@@ -30,34 +33,41 @@ def get_backup_answer(question: str) -> str:
             return ans
     return "I'm still learning that one — please ask another question!"
 
-user_input = st.text_input("📝 Ask AgriAI:")
+user_input = st.text_input("📝 Ask AgriAI in any language:")
 
 if user_input:
     with st.spinner("🤖 Thinking..."):
-        if not HF_TOKEN:
-            st.warning("🚨 Hugging Face token missing in secrets.")
-        else:
-            try:
-                response = requests.post(
-                    API_URL,
-                    headers={
-                        "Authorization": f"Bearer {HF_TOKEN}",
-                        "Content-Type": "application/json"
-                    },
-                    json={"inputs": f"Agricultural question: {user_input}"}
-                )
-                if response.status_code == 200:
-                    result = response.json()
-                    if isinstance(result, list) and "generated_text" in result[0]:
-                        st.success(result[0]["generated_text"].strip())
-                        st.info("✅ Answered by Hugging Face model")
-                    else:
-                        st.warning("⚠️ Hugging Face model did not return expected output.")
+        try:
+            # Translate user input to English
+            detected_lang = translator.detect(user_input).lang
+            translated_input = translator.translate(user_input, dest="en").text
+            st.write("🌐 Translated to English:", translated_input)
+
+            # Hugging Face API call
+            headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+            payload = {"inputs": f"Answer this agricultural question: {translated_input}"}
+            response = requests.post(API_URL, headers=headers, json=payload)
+
+            st.write("📦 API Status Code:", response.status_code)
+            st.write("📦 Raw Response:", response.text)
+
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and "generated_text" in result[0]:
+                    english_answer = result[0]["generated_text"].strip()
+                    translated_answer = translator.translate(english_answer, dest=detected_lang).text
+                    st.success(translated_answer)
+                    st.info("✅ Answered by Hugging Face model")
                 else:
-                    st.error(f"❌ API Error {response.status_code}: {response.text}")
-                    st.success(get_backup_answer(user_input))
+                    st.warning("⚠️ Unexpected response format. Showing local answer.")
+                    st.success(get_backup_answer(translated_input))
                     st.info("✅ Answered by local backup logic")
-            except Exception as e:
-                st.error(f"❌ Network Error: {e}")
-                st.success(get_backup_answer(user_input))
+            else:
+                st.warning(f"❌ API Error {response.status_code}. Using backup.")
+                st.success(get_backup_answer(translated_input))
                 st.info("✅ Answered by local backup logic")
+
+        except Exception as e:
+            st.error(f"🚨 Error: {e}")
+            st.success(get_backup_answer(user_input))
+            st.info("✅ Answered by local backup logic")
