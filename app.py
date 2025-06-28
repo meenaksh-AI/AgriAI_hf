@@ -2,40 +2,25 @@ import streamlit as st
 import requests
 
 st.set_page_config(page_title="AgriAI", page_icon="🌾")
-st.title("🌾 AgriAI - Smart Farming Assistant")
+st.title("🌾 AgriAI — Smart Agriculture Assistant")
 
 HF_TOKEN = st.secrets.get("HF_API_TOKEN")
-
 if not HF_TOKEN:
-    st.warning("🚨 Hugging Face API token not found. Please add it in Streamlit Cloud → Settings → Secrets.")
+    st.warning("🚨 Add HF token in Streamlit Secrets.")
 else:
-    MODEL_ID = "microsoft/DialoGPT-medium"
+    MODEL_ID = "facebook/opt-6.7b-instruct"
     API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-    st.markdown("👨‍🌾 Ask anything about agriculture: crops, soil, irrigation, pests.")
-
-    user_input = st.text_input("📝 Your question:")
-
+    user_input = st.text_input("📝 Ask AgriAI:")
     if user_input:
         with st.spinner("🤖 Thinking..."):
             try:
-                payload = {
-                    "inputs": {
-                        "text": user_input
-                    }
-                }
-
-                response = requests.post(API_URL, headers=headers, json=payload)
-
+                response = requests.post(API_URL, headers=headers, json={"inputs": user_input})
                 if response.status_code == 200:
-                    result = response.json()
-                    generated_text = result.get("generated_text", "🤔 No response generated.")
-                    st.success(generated_text.strip())
+                    text = response.json()[0].get("generated_text")
+                    st.success(text or "No response received.")
                 else:
-                    st.error(f"❌ API Error: {response.status_code}\nDetails: {response.text}")
-            except requests.exceptions.RequestException as e:
+                    st.error(f"❌ API Error {response.status_code}: {response.text}")
+            except Exception as e:
                 st.error(f"⚠️ Network error: {e}")
