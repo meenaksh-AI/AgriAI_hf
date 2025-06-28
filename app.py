@@ -35,24 +35,25 @@ user_input = st.text_input("📝 Ask AgriAI:")
 
 if user_input:
     with st.spinner("🤖 Thinking..."):
-        # Try HF API if token is present
+        # Try Hugging Face API if token is present
         if HF_TOKEN:
             try:
                 response = requests.post(
-                    f"https://api-inference.huggingface.co/models/facebook/opt-6.7b-instruct",
+                    "https://api-inference.huggingface.co/models/facebook/opt-6.7b-instruct",
                     headers={"Authorization": f"Bearer {HF_TOKEN}"},
                     json={"inputs": user_input}
                 )
                 if response.status_code == 200:
-                    text = response.json()[0].get("generated_text", "").strip()
-                    if text:
-                        st.success(text)
-                        st.info("✅ Answer by Hugging Face model")
-                    return
-                # Fall back if any non-200 or empty
+                    result = response.json()
+                    if isinstance(result, list) and "generated_text" in result[0]:
+                        text = result[0]["generated_text"].strip()
+                        if text:
+                            st.success(text)
+                            st.info("✅ Answer by Hugging Face model")
+                            st.stop()  # ✅ Prevent fallback if API succeeded
             except Exception:
-                pass  # ignore and fall back
+                pass  # API call failed, use backup
 
-        # Local backup fallback
+        # Fallback to backup logic
         st.success(get_backup_answer(user_input))
         st.info("✅ Answer from local backup logic")
