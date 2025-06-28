@@ -9,13 +9,13 @@ HF_TOKEN = st.secrets.get("HF_API_TOKEN")
 if not HF_TOKEN:
     st.warning("🚨 Hugging Face API token not found. Please add it in Streamlit Cloud → Settings → Secrets.")
 else:
-    MODEL_ID = "google/flan-t5-base"
+    MODEL_ID = "tiiuae/falcon-7b-instruct"  # ✅ More stable model
     API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}"
     }
 
-    st.markdown("👋 Ask me anything about crops, soil, seasons, or pests!")
+    st.markdown("👋 Ask AgriAI anything about farming, soil, seasons, or crop issues!")
 
     user_input = st.text_input("📝 Your question:")
 
