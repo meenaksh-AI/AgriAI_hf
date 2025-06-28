@@ -6,7 +6,7 @@ st.title("🌾 AgriAI — Smart Agriculture Assistant")
 
 HF_TOKEN = st.secrets.get("HF_API_TOKEN")
 
-# Backup Q&A logic for key questions
+# Backup Q&A logic for known questions
 backup_answers = {
     "best fertilizer for sugarcane": (
         "For sugarcane, a balanced N-P-K fertilizer like 20-20-20 is commonly recommended, "
@@ -29,31 +29,36 @@ def get_backup_answer(question: str) -> str:
     return "I'm still learning that one — please ask another question!"
 
 if not HF_TOKEN:
-    st.warning("🚨 Add HF token in Streamlit Secrets for advanced answers.")
-    
+    st.warning("🚨 Please add your Hugging Face token in Streamlit Secrets as 'HF_API_TOKEN'.")
+
 user_input = st.text_input("📝 Ask AgriAI:")
 
 if user_input:
     with st.spinner("🤖 Thinking..."):
-        # Try Hugging Face API if token is present
         if HF_TOKEN:
             try:
                 response = requests.post(
-                    "https://api-inference.huggingface.co/models/facebook/opt-6.7b-instruct",
-                    headers={"Authorization": f"Bearer {HF_TOKEN}"},
-                    json={"inputs": user_input}
+                    "https://api-inference.huggingface.co/models/google/flan-t5-large",
+                    headers={
+                        "Authorization": f"Bearer {HF_TOKEN}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"inputs": f"Answer this agricultural question: {user_input}"}
                 )
+
                 if response.status_code == 200:
                     result = response.json()
-                    if isinstance(result, list) and "generated_text" in result[0]:
-                        text = result[0]["generated_text"].strip()
-                        if text:
-                            st.success(text)
-                            st.info("✅ Answer by Hugging Face model")
-                            st.stop()  # ✅ Prevent fallback if API succeeded
-            except Exception:
-                pass  # API call failed, use backup
+                    if isinstance(result, dict) and "error" not in result:
+                        generated = result[0].get("generated_text", "").strip()
+                        if generated:
+                            st.success(generated)
+                            st.info("✅ Answered by Hugging Face model")
+                            st.stop()
+                else:
+                    st.error(f"❌ API Error {response.status_code}: {response.text}")
+            except Exception as e:
+                st.error(f"⚠️ Network Error: {str(e)}")
 
-        # Fallback to backup logic
+        # Fallback only if model fails
         st.success(get_backup_answer(user_input))
-        st.info("✅ Answer from local backup logic")
+        st.info("✅ Answered by local backup logic")
