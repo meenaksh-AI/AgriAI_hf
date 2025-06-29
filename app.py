@@ -1,73 +1,55 @@
 import streamlit as st
-import requests
-from googletrans import Translator
+from transformers import pipeline
 
-st.set_page_config(page_title="AgriAI", page_icon="🌾")
-st.title("🌾 AgriAI — Smart Agriculture Assistant")
-
-HF_TOKEN = st.secrets.get("HF_API_TOKEN")
-MODEL_ID = "google/flan-t5-base"
-API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
-
-translator = Translator()
-
-# Local backup answers
-backup_answers = {
-    "best fertilizer for sugarcane": (
-        "For sugarcane, a balanced NPK fertilizer like 20-20-20 is commonly recommended, "
-        "along with compost for better soil health."
-    ),
-    "best fertilizer for rice": (
-        "Rice crops benefit from Urea (nitrogen), DAP (phosphorus), and MOP (potassium). "
-        "Apply at planting and mid-tillering stages."
-    ),
-    "how do i prevent pest attacks in tomato": (
-        "Use neem oil spray early in the morning, maintain plant spacing, and introduce beneficial predators like ladybugs."
+# Load the model once (offline + stable settings)
+@st.cache_resource
+def load_model():
+    return pipeline(
+        "text2text-generation",
+        model="google/flan-t5-base"
     )
-}
 
-def get_backup_answer(question: str) -> str:
-    q = question.strip().lower()
-    for key, ans in backup_answers.items():
-        if key in q:
-            return ans
-    return "I'm still learning that one — please ask another question!"
+generator = load_model()
 
-user_input = st.text_input("📝 Ask AgriAI in any language:")
+# Setup page
+st.set_page_config(page_title="🌾 AgriAI (Final)", page_icon="🌱", layout="centered")
+st.title("🌾 AgriAI - Offline Agriculture Chat Assistant")
+st.markdown("💬 Ask anything about soil, crops, irrigation, or farming (Fully Offline & Stable)")
+
+# Session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Input
+user_input = st.chat_input("Ask your agriculture-related question...")
 
 if user_input:
-    with st.spinner("🤖 Thinking..."):
-        try:
-            # Translate user input to English
-            detected_lang = translator.detect(user_input).lang
-            translated_input = translator.translate(user_input, dest="en").text
-            st.write("🌐 Translated to English:", translated_input)
+    st.session_state.chat_history.append(("🧑 You", user_input))
 
-            # Hugging Face API call
-            headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-            payload = {"inputs": f"Answer this agricultural question: {translated_input}"}
-            response = requests.post(API_URL, headers=headers, json=payload)
+    # Clean prompt
+    prompt = f"Answer clearly: {user_input}"
+    
+    # Generate stable output (no junk)
+    response = generator(
+        prompt,
+        max_length=100,
+        do_sample=False,         # ⛔ No randomness
+        temperature=0.0          # 🔒 Deterministic output
+    )[0]["generated_text"]
 
-            st.write("📦 API Status Code:", response.status_code)
-            st.write("📦 Raw Response:", response.text)
+    # Clean junk characters
+    clean_answer = (
+        response.replace("�", "")
+                .replace("(i)", "")
+                .replace("(ii)", "")
+                .replace("(iii)", "")
+                .replace("(iv)", "")
+                .strip()
+    )
 
-            if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and "generated_text" in result[0]:
-                    english_answer = result[0]["generated_text"].strip()
-                    translated_answer = translator.translate(english_answer, dest=detected_lang).text
-                    st.success(translated_answer)
-                    st.info("✅ Answered by Hugging Face model")
-                else:
-                    st.warning("⚠️ Unexpected response format. Showing local answer.")
-                    st.success(get_backup_answer(translated_input))
-                    st.info("✅ Answered by local backup logic")
-            else:
-                st.warning(f"❌ API Error {response.status_code}. Using backup.")
-                st.success(get_backup_answer(translated_input))
-                st.info("✅ Answered by local backup logic")
+    st.session_state.chat_history.append(("🤖 AgriAI", clean_answer))
 
-        except Exception as e:
-            st.error(f"🚨 Error: {e}")
-            st.success(get_backup_answer(user_input))
-            st.info("✅ Answered by local backup logic")
+# Display chat
+for speaker, message in st.session_state.chat_history:
+    with st.chat_message(speaker):
+        st.markdown(message)
